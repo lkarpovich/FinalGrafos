@@ -44,19 +44,10 @@ public class GraphFramesAppMain {
                 .getOrCreate();
 
         SQLContext sqlContext = new org.apache.spark.sql.SQLContext(session);
+        List<Row> vertices = new ArrayList<>();
+        List<Row> edges = new ArrayList<>();
 
-//        List<Row> vertices = LoadVertices();
-//        Dataset<Row> verticesDF = sqlContext.createDataFrame( vertices, LoadSchemaVertices() );
-//
-//        List<Row> edges = LoadEdges();
-//        Dataset<Row> edgesDF = sqlContext.createDataFrame( edges, LoadSchemaEdges() );
-//
-//
-//        GraphFrame myGraph = GraphFrame.apply(verticesDF, edgesDF);
-
-//        JavaRDD<String> file = sparkContext.textFile(args[0]);
-//        file.collect().forEach(System.out::println);
-
+        // Read from .graphml file
         Configuration config = new Configuration();
         FileSystem fs = FileSystem.get(config);
         FSDataInputStream data = fs.open(new Path(args[0]));
@@ -65,41 +56,114 @@ public class GraphFramesAppMain {
         DocumentBuilder db = dbf.newDocumentBuilder();
         Document dom = db.parse(data);
 
-        Element element = dom.getDocumentElement();
-        System.out.println("Root:" + element.getTagName());
+//        Element element = dom.getDocumentElement();
+//        System.out.println("Root:" + element.getTagName());
 
         NodeList nl = dom.getElementsByTagName("node");
         NodeList el = dom.getElementsByTagName("edge");
 
-        ArrayList<Row> edges = new ArrayList<>();
-        ArrayList<Row> vertices = new ArrayList<>();
-
         for (int i = 0; i < nl.getLength(); i++) {
             Node node = nl.item(i);
             if (node.getNodeType() == Node.ELEMENT_NODE)
-                generateVertex(node);
+                vertices.add(generateVertex(node));
         }
 
         for (int i = 0; i < el.getLength(); i++) {
             Node node = el.item(i);
             if (node.getNodeType() == Node.ELEMENT_NODE)
-                generateEdge(node);
+                edges.add(generateEdge(node));
         }
+
+        Dataset<Row> verticesDF = sqlContext.createDataFrame(vertices, LoadSchemaVertices());
+        Dataset<Row> edgesDF = sqlContext.createDataFrame(edges, LoadSchemaEdges() );
+        GraphFrame myGraph = GraphFrame.apply(verticesDF, edgesDF);
+
+        //Print graph
+        System.out.println("Graph:");
+        myGraph.vertices().show();
+        myGraph.edges().show();
+
+        System.out.println("Schema");
+        myGraph.vertices().printSchema();
+        myGraph.edges().printSchema();
+
+        System.out.println("Degree");
+        myGraph.degrees().show();
+
+        System.out.println("Indegree");
+        myGraph.inDegrees().show();
+
+        System.out.println("Outdegree");
+        myGraph.outDegrees().show();
+
         sparkContext.close();
     }
 
-    public static void generateVertex(Node node){
-        Long nodeId = Long.valueOf(node.getAttributes().getNamedItem("id").getNodeValue());
+    public static Row generateVertex(Node node) {
+        Vertex v = new Vertex();
+        v.setId(Long.valueOf(node.getAttributes().getNamedItem("id").getNodeValue()));
+
         NodeList data = node.getChildNodes();
-        String key;
-        String value;
+
         for(int i = 0; i < data.getLength(); i++) {
-            key = data.item(i).getAttributes().item(0).getNodeName();
-            value = data.item(i).getAttributes().item(0).getNodeValue();
+            String key = data.item(i).getAttributes().item(0).getNodeName();
+            String value = data.item(i).getAttributes().item(0).getNodeValue();
+            switch(key) {
+                case "type":
+                    v.setType(value);
+                    break;
+                case "code":
+                    v.setCode(value);
+                    break;
+                case "icao":
+                    v.setIcao(value);
+                    break;
+                case "desc":
+                    v.setDesc(value);
+                    break;
+                case "region":
+                    v.setRegion(value);
+                    break;
+                case "runways":
+                    v.setRunways(Integer.valueOf(value));
+                    break;
+                case "longest":
+                    v.setLongest(Integer.valueOf(value));
+                    break;
+                case "elev":
+                    v.setElev(Integer.valueOf(value));
+                    break;
+                case "country":
+                    v.setCountry(value);
+                    break;
+                case "city":
+                    v.setCity(value);
+                    break;
+                case "lat":
+                    v.setLat(Double.valueOf(value));
+                    break;
+                case "lon":
+                    v.setLon(Double.valueOf(value));
+                    break;
+                case "author":
+                    v.setAuthor(value);
+                    break;
+                case "date":
+                    v.setDate(value);
+                    break;
+                case "labelV":
+                    v.setLabelV(value);
+                    break;
+                default:
+                    System.out.println("unidentified attribute for vertex");
+            }
         }
+        return RowFactory.create(v.getId(), v.getType(), v.getCode(), v.getIcao(), v.getDesc(), v.getRegion(),
+                v.getRunways(), v.getLongest(), v.getElev(), v.getCountry(), v.getCity(), v.getLat(), v.getLon(),
+                v.getAuthor(), v.getDate(), v.getLabelV());
     }
 
-    public static void generateEdge(Node node){
+    public static Row generateEdge(Node node) {
         Edge edge = new Edge();
 
         NamedNodeMap atts = node.getAttributes();
@@ -124,10 +188,11 @@ public class GraphFramesAppMain {
                     System.out.println("unidentified attribute for edge");
             }
         }
+        //TODO decide add id to edge
+        return RowFactory.create(edge.getSrc(), edge.getDes(), edge.getLabelE(), edge.getDist());
     }
 
-    public static StructType LoadSchemaVertices()
-    {
+    public static StructType LoadSchemaVertices() {
         List<StructField> vertFields = new ArrayList<>();
         vertFields.add(DataTypes.createStructField("id",DataTypes.LongType, true));
         vertFields.add(DataTypes.createStructField("type",DataTypes.StringType, true));
@@ -149,8 +214,7 @@ public class GraphFramesAppMain {
         return DataTypes.createStructType(vertFields);
     }
 
-    public static StructType LoadSchemaEdges()
-    {
+    public static StructType LoadSchemaEdges() {
         List<StructField> edgeFields = new ArrayList<>();
         edgeFields.add(DataTypes.createStructField("src",DataTypes.LongType, false));
         edgeFields.add(DataTypes.createStructField("dst",DataTypes.LongType, false));
@@ -158,17 +222,6 @@ public class GraphFramesAppMain {
         edgeFields.add(DataTypes.createStructField("dist",DataTypes.IntegerType, true));
 
         return DataTypes.createStructType(edgeFields);
-    }
-
-    public static List<Row> LoadVertices()
-    {
-        ArrayList<Row> vertices = new ArrayList<>();
-
-        for(long i= 0; i < 10; i++)
-            vertices.add(RowFactory.create(i, i + ".html",
-                    i % 2 == 0? "A": "L") );
-
-        return vertices;
     }
 
 }

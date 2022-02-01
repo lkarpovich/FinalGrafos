@@ -20,25 +20,71 @@ public class Vertex implements Serializable {
     private Double lat;
     private Double lon;
 
-    public Vertex(Long id, String type, String code, String icao, String desc, String region, String country,
-                  String city, String author, String date, String labelV, String runways, String longest,
-                  String elev, String lat, String lon) {
+    public Vertex() {
+    }
+
+    public void setId(Long id) {
         this.id = id;
+    }
+
+    public void setType(String type) {
         this.type = type;
+    }
+
+    public void setCode(String code) {
         this.code = code;
+    }
+
+    public void setIcao(String icao) {
         this.icao = icao;
+    }
+
+    public void setDesc(String desc) {
         this.desc = desc;
+    }
+
+    public void setRegion(String region) {
         this.region = region;
+    }
+
+    public void setCountry(String country) {
         this.country = country;
+    }
+
+    public void setCity(String city) {
         this.city = city;
+    }
+
+    public void setAuthor(String author) {
         this.author = author;
+    }
+
+    public void setDate(String date) {
         this.date = date;
+    }
+
+    public void setLabelV(String labelV) {
         this.labelV = labelV;
-        this.runways = Integer.valueOf(runways);
-        this.longest = Integer.valueOf(longest);
-        this.elev = Integer.valueOf(elev);
-        this.lat = Double.valueOf(lat);
-        this.lon = Double.valueOf(lon);
+    }
+
+    public void setRunways(Integer runways) {
+        this.runways = runways;
+    }
+
+    public void setLongest(Integer longest) {
+        this.longest = longest;
+    }
+
+    public void setElev(Integer elev) {
+        this.elev = elev;
+    }
+
+    public void setLat(Double lat) {
+        this.lat = lat;
+    }
+
+    public void setLon(Double lon) {
+        this.lon = lon;
     }
 
     public Long getId() {
