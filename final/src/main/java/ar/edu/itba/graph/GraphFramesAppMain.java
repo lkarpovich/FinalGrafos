@@ -103,12 +103,15 @@ public class GraphFramesAppMain {
         Vertex v = new Vertex();
         v.setId(Long.valueOf(node.getAttributes().getNamedItem("id").getNodeValue()));
 
-        NodeList data = node.getChildNodes();
+        NodeList data = ((Element)node).getElementsByTagName("*");
 
         for(int i = 0; i < data.getLength(); i++) {
-            String key = data.item(i).getAttributes().item(0).getNodeName();
-            String value = data.item(i).getAttributes().item(0).getNodeValue();
-            switch(key) {
+            Node child = data.item(i);
+            NamedNodeMap childAt = child.getAttributes();
+
+            String key = childAt.item(0).getNodeValue();
+            String value = child.getTextContent();
+            switch (key) {
                 case "type":
                     v.setType(value);
                     break;
@@ -156,6 +159,7 @@ public class GraphFramesAppMain {
                     break;
                 default:
                     System.out.println("unidentified attribute for vertex");
+
             }
         }
         return RowFactory.create(v.getId(), v.getType(), v.getCode(), v.getIcao(), v.getDesc(), v.getRegion(),
@@ -172,11 +176,13 @@ public class GraphFramesAppMain {
         edge.setSrc(Long.valueOf(atts.getNamedItem("source").getNodeValue()));
         edge.setDes(Long.valueOf(atts.getNamedItem("target").getNodeValue()));
 
-        NodeList data = node.getChildNodes();
+        NodeList data = ((Element)node).getElementsByTagName("*");
 
         for(int i = 0; i < data.getLength(); i++) {
-            String key = data.item(i).getAttributes().item(0).getNodeName();
-            String value = data.item(i).getAttributes().item(0).getNodeValue();
+            Node child = data.item(i);
+            NamedNodeMap childAt = child.getAttributes();
+            String key = childAt.item(0).getNodeValue();
+            String value = child.getTextContent();
             switch(key) {
                 case "labelE":
                     edge.setLabelE(value);
