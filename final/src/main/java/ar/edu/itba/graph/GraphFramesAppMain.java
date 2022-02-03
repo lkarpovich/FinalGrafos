@@ -1,19 +1,14 @@
 package ar.edu.itba.graph;
 
-import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Scanner;
-
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -24,20 +19,20 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.graphframes.GraphFrame;
-import org.json4s.JsonUtil;
 import org.w3c.dom.*;
 import org.xml.sax.SAXException;
-
 import org.apache.hadoop.conf.Configuration;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import static org.apache.spark.sql.functions.array;
+
 public class GraphFramesAppMain {
 
-    public static void main(String[] args) throws ParseException, IOException, ParserConfigurationException, SAXException {
+    public static void main(String[] args) throws IOException, ParserConfigurationException, SAXException {
 
-        SparkConf spark = new SparkConf().setAppName("prueba parse xml");
+        SparkConf spark = new SparkConf().setAppName("test query 1");
         JavaSparkContext sparkContext= new JavaSparkContext(spark);
         SparkSession session = SparkSession.builder()
                 .sparkContext(sparkContext.sc())
@@ -55,9 +50,6 @@ public class GraphFramesAppMain {
         DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
         DocumentBuilder db = dbf.newDocumentBuilder();
         Document dom = db.parse(data);
-
-//        Element element = dom.getDocumentElement();
-//        System.out.println("Root:" + element.getTagName());
 
         NodeList nl = dom.getElementsByTagName("node");
         NodeList el = dom.getElementsByTagName("edge");
@@ -96,6 +88,36 @@ public class GraphFramesAppMain {
         System.out.println("Outdegree");
         myGraph.outDegrees().show();
 
+        //print
+        final String TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss").format(LocalDateTime.now());
+        final String DIR_LOC = new Path(args[0]).getParent().toString();
+        final String OUTPUT_PATH = "hdfs:///user/lkarpovich/" + TIMESTAMP;
+
+
+        myGraph.vertices().createOrReplaceTempView("vertex");
+        myGraph.edges().createOrReplaceTempView("edges");
+
+        Dataset<Row> withoutStop = myGraph
+                .filterEdges("labelE = 'route'")
+                .filterVertices("labelV = 'airport'")
+                .find("(a)-[e]->(b)")
+                .filter("b.code = 'SEA'")
+                .filter("a.lat < 0")
+                .filter("a.lon < 0")
+                .select(array("a.code","b.code").as("route"));
+
+        Dataset<Row> withStop = myGraph
+                .filterEdges("labelE = 'route'")
+                .filterVertices("labelV = 'airport'")
+                .find("(a)-[e]->(b); (b)-[e2]->(c)")
+                .filter("c.code = 'SEA'")
+                .filter("a.lat < 0")
+                .filter("a.lon < 0")
+                .select(array("a.code","b.code", "c.code").as("route"));
+
+        withoutStop.union(withStop).show();
+
+        withoutStop.union(withStop).rdd().saveAsTextFile(OUTPUT_PATH + "-b1");
         sparkContext.close();
     }
 
@@ -195,7 +217,7 @@ public class GraphFramesAppMain {
             }
         }
         //TODO decide add id to edge
-        return RowFactory.create(edge.getSrc(), edge.getDes(), edge.getLabelE(), edge.getDist());
+        return RowFactory.create(edge.getId(), edge.getSrc(), edge.getDes(), edge.getLabelE(), edge.getDist());
     }
 
     public static StructType LoadSchemaVertices() {
@@ -222,6 +244,7 @@ public class GraphFramesAppMain {
 
     public static StructType LoadSchemaEdges() {
         List<StructField> edgeFields = new ArrayList<>();
+        edgeFields.add(DataTypes.createStructField("id",DataTypes.LongType, true));
         edgeFields.add(DataTypes.createStructField("src",DataTypes.LongType, false));
         edgeFields.add(DataTypes.createStructField("dst",DataTypes.LongType, false));
         edgeFields.add(DataTypes.createStructField("labelE",DataTypes.StringType, false));
