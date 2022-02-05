@@ -26,13 +26,13 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
-import static org.apache.spark.sql.functions.array;
+import static org.apache.spark.sql.functions.*;
 
 public class GraphFramesAppMain {
 
     public static void main(String[] args) throws IOException, ParserConfigurationException, SAXException {
 
-        SparkConf spark = new SparkConf().setAppName("test query 1");
+        SparkConf spark = new SparkConf().setAppName("final");
         JavaSparkContext sparkContext= new JavaSparkContext(spark);
         SparkSession session = SparkSession.builder()
                 .sparkContext(sparkContext.sc())
@@ -70,7 +70,7 @@ public class GraphFramesAppMain {
         Dataset<Row> edgesDF = sqlContext.createDataFrame(edges, LoadSchemaEdges() );
         GraphFrame myGraph = GraphFrame.apply(verticesDF, edgesDF);
 
-        //Print graph
+        // Print graph
         System.out.println("Graph:");
         myGraph.vertices().show();
         myGraph.edges().show();
@@ -88,15 +88,15 @@ public class GraphFramesAppMain {
         System.out.println("Outdegree");
         myGraph.outDegrees().show();
 
-        //print
-        final String TIMESTAMP = DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss").format(LocalDateTime.now());
-        final String DIR_LOC = new Path(args[0]).getParent().toString();
-        final String OUTPUT_PATH = "hdfs:///user/lkarpovich/" + TIMESTAMP;
+        // Queries and Print to file
+        final String path = "hdfs:///user/lkarpovich/" +
+                DateTimeFormatter.ofPattern("yyyy-MM-dd-HHmmss").format(LocalDateTime.now());
 
 
         myGraph.vertices().createOrReplaceTempView("vertex");
         myGraph.edges().createOrReplaceTempView("edges");
 
+        //Query 1
         Dataset<Row> withoutStop = myGraph
                 .filterEdges("labelE = 'route'")
                 .filterVertices("labelV = 'airport'")
@@ -104,7 +104,8 @@ public class GraphFramesAppMain {
                 .filter("b.code = 'SEA'")
                 .filter("a.lat < 0")
                 .filter("a.lon < 0")
-                .select(array("a.code","b.code").as("route"));
+                .select(col("a.code").as("airport"), concat(col("a.code"), lit("-"),
+                        col("b.code")).as("route"));
 
         Dataset<Row> withStop = myGraph
                 .filterEdges("labelE = 'route'")
@@ -113,11 +114,26 @@ public class GraphFramesAppMain {
                 .filter("c.code = 'SEA'")
                 .filter("a.lat < 0")
                 .filter("a.lon < 0")
-                .select(array("a.code","b.code", "c.code").as("route"));
+                .select(col("a.code").as("airport"), concat(col("a.code"), lit("-"),
+                        col("b.code"), lit("-"), col("c.code")).as("route"));
 
         withoutStop.union(withStop).show();
+        withoutStop.union(withStop).rdd().saveAsTextFile(path + "-b1.txt");
 
-        withoutStop.union(withStop).rdd().saveAsTextFile(OUTPUT_PATH + "-b1");
+        // Query 2
+        Dataset<Row> elev = myGraph
+                .find("(a)-[e]->(b); (c)-[e2]->(b)")
+                .filter("a.labelV = 'continent'")
+                .filter("c.labelV = 'country'")
+                .filter("b.labelV = 'airport'")
+                .select(col("a.desc").as("continent"), concat(col("c.code"), lit("("),
+                        col("c.desc"), lit(")")).as("country"), col("b.elev").as("elevation"))
+                .groupBy("continent", "country").agg(collect_list("elevation").cast("String"))
+                .orderBy("continent", "country");
+
+        elev.show();
+        elev.rdd().saveAsTextFile(path + "-b2.txt");
+
         sparkContext.close();
     }
 
@@ -216,7 +232,6 @@ public class GraphFramesAppMain {
                     System.out.println("unidentified attribute for edge");
             }
         }
-        //TODO decide add id to edge
         return RowFactory.create(edge.getId(), edge.getSrc(), edge.getDes(), edge.getLabelE(), edge.getDist());
     }
 
