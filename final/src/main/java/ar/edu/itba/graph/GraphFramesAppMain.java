@@ -127,8 +127,9 @@ public class GraphFramesAppMain {
                 .filter("c.labelV = 'country'")
                 .filter("b.labelV = 'airport'")
                 .select(col("a.desc").as("continent"), concat(col("c.code"), lit("("),
-                        col("c.desc"), lit(")")).as("country"), col("b.elev").as("elevation"))
-                .groupBy("continent", "country").agg(collect_list("elevation").cast("String"))
+                        col("c.desc"), lit(")")).as("country"), col("b.elev").cast("String").as("elevation"))
+                .groupBy("continent", "country")
+                .agg(sort_array(collect_list(col("elevation"))).alias("elevations"))
                 .orderBy("continent", "country");
 
         elev.show();
